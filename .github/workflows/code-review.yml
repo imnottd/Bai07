@@ -1,0 +1,49 @@
+name: Automated Code Review via Pull Request
+
+on:
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  code-review:
+    name: Checkstyle & Unit Tests
+    runs-on: ubuntu-latest
+
+    # Quyền cần thiết để bot có thể tạo inline comment và annotations
+    permissions:
+      contents: read
+      pull-requests: write
+      checks: write
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+          cache: 'maven'
+
+      # 1. Chạy Unit Test
+      - name: Run Unit Tests
+        run: mvn test
+
+      # 2. Sinh báo cáo Checkstyle (dạng XML tại target/checkstyle-result.xml)
+      - name: Generate Checkstyle Report
+        if: ${{ always() }}
+        run: mvn checkstyle:checkstyle
+
+      # 3. Đăng Inline Comment vào dòng code vi phạm trên Pull Request
+      - name: Post Checkstyle Inline Comments
+        uses: dbelyaev/action-checkstyle@v0.5.0
+        if: ${{ always() }}
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          checkstyle_xml_path: target/checkstyle-result.xml
+          level: error
+
+      # 4. Kiểm tra nghiêm ngặt: Bước này sẽ FAIL nếu có vi phạm checkstyle, từ đó khoá nút Merge
+      - name: Enforce Checkstyle Rule
+        run: mvn checkstyle:check
